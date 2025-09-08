@@ -1,4 +1,4 @@
-import os
+import os, requests
 from fastapi import FastAPI
 from supabase import create_client
 from dotenv import load_dotenv
@@ -112,21 +112,37 @@ def get_week(week_id: int):
 
 @app.get("/grid")
 def get_grid():
-    # get all members
+    # Get weeks
+    weeks_resp = supabase.table("weeks").select("id, week_number").order("week_number").execute()
+    weeks = weeks_resp.data
+    week_ids = {w["id"]: w["week_number"] for w in weeks}
+
+    # Get members
     members_resp = supabase.table("family_members").select("id, name").execute()
     members = members_resp.data
 
-    # get all weeks (id + week_number)
-    weeks_resp = supabase.table("weeks").select("id, week_number").execute()
-    weeks = weeks_resp.data
+    # Get picks
+    picks_resp = supabase.table("picks").select("member_id, week_id, game_id, team").execute()
+    picks = picks_resp.data
 
-    # build stub grid with 0s
+    # Get results
+    results_resp = supabase.table("results").select("week_id, game_id, winner").execute()
+    results = results_resp.data
+
+    # Build lookup for results
+    results_lookup = {(r["week_id"], r["game_id"]): r["winner"] for r in results}
+
+    # Initialize grid
     grid = []
     for m in members:
-        row = {"member": m["name"], "scores": {}}
-        for w in weeks:
-            row["scores"][w["week_number"]] = 0  # stub score
-        grid.append(row)
+        scores = {str(week_ids[w["id"]]): 0 for w in weeks}
+        # Count correct picks
+        for p in picks:
+            if p["member_id"] == m["id"]:
+                key = (p["week_id"], p["game_id"])
+                if key in results_lookup and results_lookup[key] == p["team"]:
+                    scores[str(week_ids[p["week_id"]])] += 1
+        grid.append({"member": m["name"], "scores": scores})
 
     return {"weeks": weeks, "grid": grid}
 
@@ -184,3 +200,119 @@ def submit_picks(req: SubmitPicksRequest):
     resp = supabase.table("picks").insert(rows).execute()
 
     return {"inserted": len(resp.data), "week_id": req.week_id}
+
+
+@app.post("/sync_results/{week_id}")
+def sync_results(week_id: int):
+    # 1. Get week info from DB
+    week_resp = supabase.table("weeks").select("id, week_number, games").eq("id", week_id).execute()
+    if not week_resp.data:
+        raise HTTPException(status_code=404, detail="Week not found")
+    week = week_resp.data[0]
+
+    week_number = week["week_number"]
+
+    # 2. Call ESPN scoreboard
+    url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
+    params = {
+        "seasontype": 2,  # regular season
+        "week": week_number,
+        "dates": 2025     # season year
+    }
+    r = requests.get(url, params=params)
+    r.raise_for_status()
+    data = r.json()
+
+    inserted = []
+    for game_id, scheduled in enumerate(week["games"]):
+        # Find matching ESPN event
+        event = None
+        for ev in data.get("events", []):
+            comp = ev["competitions"][0]
+            teams = {c["team"]["abbreviation"]: c for c in comp["competitors"]}
+            if scheduled["home"] in teams and scheduled["away"] in teams:
+                event = comp
+                break
+        if not event:
+            continue
+
+        # Only process completed games
+        if not event["status"]["type"].get("completed", False):
+            continue
+
+        home = next(c for c in event["competitors"] if c["homeAway"] == "home")
+        away = next(c for c in event["competitors"] if c["homeAway"] == "away")
+
+        winner = home["team"]["abbreviation"] if home.get("winner") else away["team"]["abbreviation"]
+
+        row = {
+            "week_id": week_id,
+            "game_id": game_id,
+            "winner": winner,
+            "home_score": int(home["score"]),
+            "away_score": int(away["score"]),
+        }
+
+        # Insert into Supabase (ignore if already exists)
+        resp = supabase.table("results_test").insert(row).execute()
+        inserted.append(resp.data[0])
+
+    return {"synced": len(inserted), "results": inserted}
+
+@app.post("/sync_results_test/{week_id}")
+def sync_results(week_id: int):
+    # 1. Get week info from DB
+    week_resp = supabase.table("weeks_test").select("id, week_number, games").eq("id", week_id).execute()
+    if not week_resp.data:
+        raise HTTPException(status_code=404, detail="Week not found")
+    week = week_resp.data[0]
+
+    week_number = week["week_number"]
+
+    # 2. Call ESPN scoreboard
+    url = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard"
+    params = {
+        "seasontype": 2,  # regular season
+        "week": week_number,
+        "dates": 2025     # season year
+    }
+    r = requests.get(url, params=params)
+    r.raise_for_status()
+    data = r.json()
+
+    inserted = []
+    for game_id, scheduled in enumerate(week["games"]):
+        # Find matching ESPN event
+        event = None
+        for ev in data.get("events", []):
+            comp = ev["competitions"][0]
+            teams = {c["team"]["abbreviation"]: c for c in comp["competitors"]}
+            if scheduled["home"] in teams and scheduled["away"] in teams:
+                event = comp
+                break
+        if not event:
+            continue
+
+        # Only process completed games
+        if not event["status"]["type"].get("completed", False):
+            continue
+
+        home = next(c for c in event["competitors"] if c["homeAway"] == "home")
+        away = next(c for c in event["competitors"] if c["homeAway"] == "away")
+
+        winner = home["team"]["abbreviation"] if home.get("winner") else away["team"]["abbreviation"]
+
+        row = {
+            "week_id": week_id,
+            "game_id": game_id,
+            "winner": winner,
+            "home_score": int(home["score"]),
+            "away_score": int(away["score"]),
+        }
+
+        # Insert into Supabase (ignore if already exists)
+        resp = supabase.table("results_test").insert(row).execute()
+
+        inserted.append(resp.data[0])
+
+    return {"synced": len(inserted), "results": inserted}

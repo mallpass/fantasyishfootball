@@ -1,0 +1,25 @@
+[
+  {
+    "week_number": 1,
+    "start_date": "2025-09-10",
+    "end_date": "2025-09-16",
+    "games": [
+      { "home": "DAL", "away": "PHI" },
+      { "home": "KC", "away": "LAC" },
+      { "home": "TB", "away": "ATL" },
+      { "home": "CIN", "away": "CLE" },
+      { "home": "MIA", "away": "IND" },
+      { "home": "CAR", "away": "JAX" },
+      { "home": "LV", "away": "NE" },
+      { "home": "ARI", "away": "NO" },
+      { "home": "PIT", "away": "NYJ" },
+      { "home": "NYG", "away": "WAS" },
+      { "home": "TEN", "away": "DEN" },
+      { "home": "SF", "away": "SEA" },
+      { "home": "DET", "away": "GB" },
+      { "home": "HOU", "away": "LAR" },
+      { "home": "BAL", "away": "BUF" },
+      { "home": "MIN", "away": "CHI" }
+    ]
+  }
+]
