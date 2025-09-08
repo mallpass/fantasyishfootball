@@ -1,7 +1,186 @@
+import os
 from fastapi import FastAPI
+from supabase import create_client
+from dotenv import load_dotenv
+from fastapi import HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+
+from datetime import datetime, time, timedelta, timezone
+
+from pydantic import BaseModel
+from typing import List
+
+MST = timezone(timedelta(hours=-7))
+
+class Pick(BaseModel):
+    game_id: int
+    team: str
+
+class SubmitPicksRequest(BaseModel):
+    member_code: str
+    week_id: int
+    picks: List[Pick]
+
+# load .env file
+load_dotenv()
+
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# read env vars
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_SERVICE_KEY")
+
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+@app.get("/members")
+def get_members():
+    resp = supabase.table("family_members").select("*").execute()
+    return resp.data
+
+@app.post("/add_member")
+def add_member(name: str, code: str):
+    resp = supabase.table("family_members").insert(
+        {"name": name, "code": code}
+    ).execute()
+    return resp.data
+
+@app.post("/submit_pick")
+def submit_pick(member_code: str, week_id: int, game_id: int, team: str):
+    # find member by code
+    member_resp = supabase.table("family_members").select("id").eq("code", member_code).execute()
+    if not member_resp.data:
+        raise HTTPException(status_code=404, detail="Invalid member code")
+
+    member_id = member_resp.data[0]["id"]
+
+    # insert pick
+    pick = {
+        "week_id": week_id,
+        "member_id": member_id,
+        "game_id": game_id,
+        "team": team
+    }
+
+    resp = supabase.table("picks").insert(pick).execute()
+
+    return resp.data
+
+@app.get("/week/{week_id}")
+def get_week(week_id: int):
+    # get the week info (games JSON)
+    week_resp = supabase.table("weeks").select("*").eq("id", week_id).execute()
+    if not week_resp.data:
+        raise HTTPException(status_code=404, detail="Week not found")
+    week = week_resp.data[0]
+
+    # get all picks for this week
+    picks_resp = supabase.table("picks").select("member_id, game_id, team").eq("week_id", week_id).execute()
+
+    # map member IDs → names
+    members_resp = supabase.table("family_members").select("id, name").execute()
+    members = {m["id"]: m["name"] for m in members_resp.data}
+
+    # combine data
+    picks = [
+        {
+            "member": members[p["member_id"]],
+            "game_id": p["game_id"],
+            "team": p["team"]
+        }
+        for p in picks_resp.data
+    ]
+
+    return {
+        "week_number": week["week_number"],
+        "games": week["games"],
+        "picks": picks
+    }
+
+
+@app.get("/grid")
+def get_grid():
+    # get all members
+    members_resp = supabase.table("family_members").select("id, name").execute()
+    members = members_resp.data
+
+    # get all weeks (id + week_number)
+    weeks_resp = supabase.table("weeks").select("id, week_number").execute()
+    weeks = weeks_resp.data
+
+    # build stub grid with 0s
+    grid = []
+    for m in members:
+        row = {"member": m["name"], "scores": {}}
+        for w in weeks:
+            row["scores"][w["week_number"]] = 0  # stub score
+        grid.append(row)
+
+    return {"weeks": weeks, "grid": grid}
+
+
+@app.get("/next_week")
+def get_next_week():
+    today = datetime.now(MST)
+
+    weeks_resp = supabase.table("weeks").select("id, week_number, start_date, games").order("start_date").execute()
+    for w in weeks_resp.data:
+        start = datetime.fromisoformat(w["start_date"])
+        cutoff = datetime.combine(start, time(22, 0), MST)  # 10:00 PM MST on start_date
+        if today <= cutoff:
+            return w
+
+    raise HTTPException(status_code=404, detail="No upcoming week available")
+
+
+@app.get("/can_pick/{member_code}")
+def can_pick(member_code: str):
+    # Find member
+    member_resp = supabase.table("family_members").select("id").eq("code", member_code).execute()
+    if not member_resp.data:
+        raise HTTPException(status_code=404, detail="Invalid member code")
+    member_id = member_resp.data[0]["id"]
+
+    # Find next week
+    week = get_next_week()
+    week_id = week["id"]
+
+    # Check if picks exist
+    picks_resp = supabase.table("picks").select("id").eq("week_id", week_id).eq("member_id", member_id).execute()
+    already = len(picks_resp.data) > 0
+
+    return {
+        "allowed": not already,
+        "week_id": week_id,
+        "week_number": week["week_number"],
+    }
+
+@app.post("/submit_picks")
+def submit_picks(req: SubmitPicksRequest):
+    # Find member
+    member_resp = supabase.table("family_members").select("id").eq("code", req.member_code).execute()
+    if not member_resp.data:
+        raise HTTPException(status_code=404, detail="Invalid member code")
+    member_id = member_resp.data[0]["id"]
+
+    # Insert all picks
+    rows = [
+        {"week_id": req.week_id, "member_id": member_id, "game_id": p.game_id, "team": p.team}
+        for p in req.picks
+    ]
+
+    resp = supabase.table("picks").insert(rows).execute()
+
+    return {"inserted": len(resp.data), "week_id": req.week_id}
