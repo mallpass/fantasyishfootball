@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import "../styles/PickAuth.css";
 
 export default function PickAuth() {
   const [code, setCode] = useState("");
@@ -14,7 +15,6 @@ export default function PickAuth() {
       const data = await res.json();
 
       if (res.ok && data.allowed) {
-        // redirect to game picking page
         navigate(`/pick/week/${data.week_id}/${code}`);
       } else if (res.ok && !data.allowed) {
         setMessage("You already submitted picks for this week!");
@@ -28,7 +28,7 @@ export default function PickAuth() {
   }
 
   return (
-    <div>
+    <div className="pick-auth">
       <h2>Enter Your Code</h2>
       <form onSubmit={handleSubmit}>
         <input

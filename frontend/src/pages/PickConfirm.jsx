@@ -1,5 +1,7 @@
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { useState, useEffect } from "react";
+import "../styles/PickConfirm.css";
+
 
 export default function PickConfirm() {
   const { weekId, code } = useParams();
@@ -45,7 +47,7 @@ export default function PickConfirm() {
   }
 
   return (
-    <div>
+    <div className="pickconfirm">
       <h2>Confirm Picks for Week {weekId}</h2>
       <table border="1" cellPadding="6" style={{ borderCollapse: "collapse" }}>
         <thead>

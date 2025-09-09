@@ -1,0 +1,54 @@
+.pickconfirm {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  min-height: 100vh;
+  font-family: sans-serif;
+  background-color: #f9f9f9;
+  padding: 20px;
+}
+
+.pickconfirm h2 {
+  margin-bottom: 20px;
+}
+
+.pickconfirm table {
+  border-collapse: collapse;
+  margin-bottom: 20px;
+  background: white;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+}
+
+.pickconfirm th,
+.pickconfirm td {
+  border: 1px solid #ddd;
+  padding: 10px 15px;
+  text-align: center;
+}
+
+.pickconfirm th {
+  background-color: #007bff;
+  color: white;
+}
+
+.pickconfirm select {
+  padding: 5px;
+  font-size: 14px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+}
+
+.pickconfirm button {
+  padding: 10px 20px;
+  font-size: 16px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.pickconfirm button:hover {
+  background-color: #0056b3;
+}

@@ -1,0 +1,49 @@
+.grid-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: sans-serif;
+}
+
+.grid-table th,
+.grid-table td {
+  border: 1px solid #ddd;
+  padding: 8px;
+  text-align: center;
+}
+
+.grid-table th {
+  background-color: #f4f4f4;
+  font-weight: bold;
+}
+
+/* Mobile: stack weeks into cards */
+@media (max-width: 768px) {
+  .grid-table {
+    display: block;
+  }
+
+  .week-card {
+    border: 1px solid #ddd;
+    margin: 12px 0;
+    padding: 8px;
+    background: #fff;
+    border-radius: 6px;
+  }
+
+  .week-card h3 {
+    margin: 0 0 8px;
+    background: #f4f4f4;
+    padding: 4px;
+  }
+
+  .week-card table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .week-card th,
+  .week-card td {
+    border: 1px solid #ddd;
+    padding: 6px;
+  }
+}

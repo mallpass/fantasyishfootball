@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import teamColors from "../utils/teamColors";
+import "../styles/PickGame.css";
 
 export default function PickGame() {
   const { weekId, code } = useParams();
   const [weekData, setWeekData] = useState(null);
   const [currentGame, setCurrentGame] = useState(0);
   const [picks, setPicks] = useState([]);
+  const [animState, setAnimState] = useState("enter"); // "enter" | "exit"
+  const [showSparks, setShowSparks] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -15,34 +19,71 @@ export default function PickGame() {
       .catch((err) => console.error(err));
   }, [weekId]);
 
-  function handlePick(team) {
-  const newPick = { game_id: currentGame, team };
-  const updatedPicks = [...picks, newPick];   // build it here
-  setPicks(updatedPicks);
+  // Trigger sparks after panels slide in
+  useEffect(() => {
+    if (animState === "enter") {
+      const timer = setTimeout(() => setShowSparks(true), 600); // panels collide
+      const clear = setTimeout(() => setShowSparks(false), 1300); // hide sparks
+      return () => {
+        clearTimeout(timer);
+        clearTimeout(clear);
+      };
+    }
+  }, [animState]);
 
-  if (currentGame + 1 < weekData.games.length) {
-    setCurrentGame(currentGame + 1);
-  } else {
-    // all games picked → move to confirm page with updated picks
-    navigate(`/pick/confirm/${weekId}/${code}`, { state: { picks: updatedPicks } });
+  function handlePick(team) {
+    // add pick
+    const newPick = { game_id: currentGame, team };
+    const updatedPicks = [...picks, newPick];
+    setPicks(updatedPicks);
+
+    // trigger exit animation
+    setAnimState("exit");
+
+    // after exit animation ends, go to next game or confirm
+    setTimeout(() => {
+      if (currentGame + 1 < weekData.games.length) {
+        setCurrentGame((prev) => prev + 1);
+        setAnimState("enter"); // reset for new game
+      } else {
+        navigate(`/pick/confirm/${weekId}/${code}`, {
+          state: { picks: updatedPicks },
+        });
+      }
+    }, 600); // match CSS duration
   }
-}
 
   if (!weekData) return <p>Loading week...</p>;
 
   const game = weekData.games[currentGame];
+  const awayColor = teamColors[game.away] || "#555";
+  const homeColor = teamColors[game.home] || "#333";
 
   return (
-    <div>
-      <h2>Week {weekData.week_number} Picks</h2>
-      <h3>
-        Game {currentGame + 1} of {weekData.games.length}
-      </h3>
-      <p>
-        {game.away} @ {game.home}
-      </p>
-      <button onClick={() => handlePick(game.away)}>{game.away}</button>
-      <button onClick={() => handlePick(game.home)}>{game.home}</button>
+    <div className="pickgame-container">
+      <div
+        key={`${currentGame}-away-${animState}`}
+        className={`team-panel away ${animState}`}
+        style={{ backgroundColor: awayColor }}
+        onClick={() => handlePick(game.away)}
+      >
+        <span className="team-name">{game.away}</span>
+      </div>
+      <div
+        key={`${currentGame}-home-${animState}`}
+        className={`team-panel home ${animState}`}
+        style={{ backgroundColor: homeColor }}
+        onClick={() => handlePick(game.home)}
+      >
+        <span className="team-name">{game.home}</span>
+      </div>
+
+      {showSparks && (
+        <>
+           <div className="effect-sparks left" />
+           <div className="effect-sparks right mirrored" />
+        </>
+      )}
     </div>
   );
 }
